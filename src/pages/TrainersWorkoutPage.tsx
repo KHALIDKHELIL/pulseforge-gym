@@ -13,16 +13,16 @@ export const TrainersWorkoutPage: React.FC = () => {
   const [planTitle, setPlanTitle] = useState('Upper Body Hypertrophy Block');
   const [goalFocus, setGoalFocus] = useState('Strength & Muscle Mass');
   const [exercises, setExercises] = useState<ExerciseItem[]>([
-    { name: 'Barbell Incline Bench Press', sets: 4, reps: '8-10', rest: '90s' },
-    { name: 'Weighted Pull-Ups', sets: 4, reps: '8', rest: '90s' },
-    { name: 'Seated Dumbbell Shoulder Press', sets: 3, reps: '10-12', rest: '60s' },
+    { name: 'Barbell Incline Bench Press', sets: 4, reps: '8-10', rest: '90s', completed: false },
+    { name: 'Weighted Pull-Ups', sets: 4, reps: '8', rest: '90s', completed: false },
+    { name: 'Seated Dumbbell Shoulder Press', sets: 3, reps: '10-12', rest: '60s', completed: false },
   ]);
   const [saving, setSaving] = useState(false);
 
   const fetchAll = async () => {
     const [tRes, mRes, wRes] = await Promise.all([
       supabase.from('trainers').select('*'),
-      supabase.from('members').select('*'),
+      supabase.from('members').select('*').order('member_code'),
       supabase.from('workout_plans').select('*').order('created_at', { ascending: false }),
     ]);
     if (tRes.data) {
@@ -41,7 +41,10 @@ export const TrainersWorkoutPage: React.FC = () => {
   }, []);
 
   const addExerciseRow = () => {
-    setExercises([...exercises, { name: '', sets: 3, reps: '10', rest: '60s' }]);
+    setExercises([
+      ...exercises,
+      { name: '', sets: 3, reps: '10', rest: '60s', completed: false },
+    ]);
   };
 
   const updateExercise = (index: number, field: keyof ExerciseItem, value: any) => {
@@ -51,23 +54,54 @@ export const TrainersWorkoutPage: React.FC = () => {
   };
 
   const removeExercise = (index: number) => {
+    if (exercises.length <= 1) return;
     setExercises(exercises.filter((_, i) => i !== index));
   };
 
   const handleSaveWorkout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMemberId) return;
+    const validExercises = exercises.filter((ex) => ex.name.trim() !== '' && ex.sets > 0);
+    if (!selectedMemberId || validExercises.length === 0) return;
+
     setSaving(true);
 
-    await supabase.from('workout_plans').insert({
-      member_id: selectedMemberId,
-      trainer_id: selectedTrainerId || null,
-      title: planTitle,
-      goal_focus: goalFocus,
-      exercises,
-    });
+    // Check if member already has a plan with the same title -> update instead of duplicating
+    const existing = plans.find(
+      (p) =>
+        p.member_id === selectedMemberId &&
+        p.title.toLowerCase() === planTitle.trim().toLowerCase()
+    );
+
+    if (existing) {
+      await supabase
+        .from('workout_plans')
+        .update({
+          trainer_id: selectedTrainerId || null,
+          goal_focus: goalFocus,
+          exercises: validExercises,
+        })
+        .eq('id', existing.id);
+    } else {
+      await supabase.from('workout_plans').insert({
+        member_id: selectedMemberId,
+        trainer_id: selectedTrainerId || null,
+        title: planTitle.trim(),
+        goal_focus: goalFocus.trim(),
+        exercises: validExercises,
+      });
+    }
+
+    await supabase
+      .from('members')
+      .update({ assigned_trainer_id: selectedTrainerId || null })
+      .eq('id', selectedMemberId);
 
     setSaving(false);
+    fetchAll();
+  };
+
+  const handleDeletePlan = async (planId: string) => {
+    await supabase.from('workout_plans').delete().eq('id', planId);
     fetchAll();
   };
 
@@ -82,21 +116,27 @@ export const TrainersWorkoutPage: React.FC = () => {
 
       {/* Trainer Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {trainers.map((t) => (
-          <div key={t.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-            <div className="flex items-center justify-between">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400">
-                {t.specialty}
-              </span>
-              <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
-                <Star className="w-3.5 h-3.5 fill-amber-400" /> {t.rating}
-              </span>
+        {trainers.map((t) => {
+          const assignedCount = members.filter((m) => m.assigned_trainer_id === t.id).length;
+          return (
+            <div key={t.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400">
+                  {t.specialty}
+                </span>
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                  <Star className="w-3.5 h-3.5 fill-amber-400" /> {t.rating}
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-white mt-3">{t.full_name}</h3>
+              <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.bio}</p>
+              <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-800 text-[11px] text-slate-400">
+                <span>{t.experience_years} yrs exp</span>
+                <span className="text-emerald-400 font-bold">{assignedCount} Assigned Clients</span>
+              </div>
             </div>
-            <h3 className="text-base font-bold text-white mt-3">{t.full_name}</h3>
-            <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.bio}</p>
-            <p className="text-[11px] text-slate-500 mt-3">{t.experience_years} yrs experience</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Workout Builder Form */}
@@ -107,7 +147,7 @@ export const TrainersWorkoutPage: React.FC = () => {
         >
           <div className="flex items-center gap-2">
             <Dumbbell className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-lg font-bold text-white">Author New Member Routine</h3>
+            <h3 className="text-lg font-bold text-white">Author / Update Member Routine</h3>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -175,7 +215,9 @@ export const TrainersWorkoutPage: React.FC = () => {
           {/* Dynamic Exercises List */}
           <div className="space-y-2.5 pt-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase text-slate-400">Exercises (JSONB)</span>
+              <span className="text-xs font-bold uppercase text-slate-400">
+                Exercises (Name | Sets | Reps | Rest)
+              </span>
               <button
                 type="button"
                 onClick={addExerciseRow}
@@ -197,13 +239,16 @@ export const TrainersWorkoutPage: React.FC = () => {
                 />
                 <input
                   type="number"
+                  min={1}
+                  max={20}
                   placeholder="Sets"
                   value={ex.sets}
-                  onChange={(e) => updateExercise(i, 'sets', Number(e.target.value))}
+                  onChange={(e) => updateExercise(i, 'sets', Math.max(1, Number(e.target.value)))}
                   className="col-span-2 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white"
                 />
                 <input
                   type="text"
+                  required
                   placeholder="Reps"
                   value={ex.reps}
                   onChange={(e) => updateExercise(i, 'reps', e.target.value)}
@@ -211,6 +256,7 @@ export const TrainersWorkoutPage: React.FC = () => {
                 />
                 <input
                   type="text"
+                  required
                   placeholder="Rest"
                   value={ex.rest}
                   onChange={(e) => updateExercise(i, 'rest', e.target.value)}
@@ -219,7 +265,8 @@ export const TrainersWorkoutPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => removeExercise(i)}
-                  className="col-span-1 p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg flex justify-center"
+                  disabled={exercises.length <= 1}
+                  className="col-span-1 p-2 text-rose-400 hover:bg-rose-500/10 disabled:opacity-30 rounded-lg flex justify-center"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -240,7 +287,7 @@ export const TrainersWorkoutPage: React.FC = () => {
         {/* Published Workout Plans */}
         <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
           <h3 className="text-base font-bold text-white">Published Member Programs</h3>
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+          <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
             {plans.length === 0 ? (
               <p className="text-xs text-slate-500">
                 No custom plans saved yet. Click Publish on the left to add one!
@@ -255,13 +302,22 @@ export const TrainersWorkoutPage: React.FC = () => {
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-emerald-400">
-                        {mem?.full_name || 'Assigned Member'}
+                        {mem ? `${mem.full_name} (${mem.member_code})` : 'Assigned Member'}
                       </span>
+                      <button
+                        onClick={() => handleDeletePlan(p.id)}
+                        className="text-slate-500 hover:text-rose-400 p-1"
+                        title="Delete workout plan"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-white">{p.title}</p>
                       <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
                         {p.goal_focus}
                       </span>
                     </div>
-                    <p className="text-sm font-bold text-white">{p.title}</p>
                     <ul className="text-xs text-slate-400 space-y-1">
                       {(p.exercises || []).map((ex, idx) => (
                         <li key={idx}>

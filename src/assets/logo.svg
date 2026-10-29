@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <rect width="120" height="120" rx="28" fill="#0F172A" />
+  <rect x="4" y="4" width="112" height="112" rx="24" stroke="#10B981" stroke-width="4" stroke-opacity="0.4" />
+  <!-- Outer Dumbbell Plates -->
+  <rect x="20" y="42" width="10" height="36" rx="4" fill="#10B981" />
+  <rect x="33" y="34" width="10" height="52" rx="4" fill="#34D399" />
+  <rect x="90" y="42" width="10" height="36" rx="4" fill="#10B981" />
+  <rect x="77" y="34" width="10" height="52" rx="4" fill="#34D399" />
+  <!-- Center Pulse Bar -->
+  <path d="M43 60H51L56 45L64 75L69 60H77" stroke="#10B981" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

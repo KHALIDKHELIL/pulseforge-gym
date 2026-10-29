@@ -19,8 +19,16 @@ export const EquipmentPage: React.FC = () => {
     machine: Equipment,
     newStatus: 'Operational' | 'Maintenance Due' | 'Out of Order'
   ) => {
+    if (machine.status === newStatus) return;
+
     const newScore =
       newStatus === 'Operational' ? 98 : newStatus === 'Maintenance Due' ? 72 : 35;
+
+    const defaultNotes: Record<string, string> = {
+      Operational: 'Full mechanical inspection completed; cables, bearings, and frame verified safe.',
+      'Maintenance Due': 'Scheduled preventive servicing required within 7 days.',
+      'Out of Order': 'Safety lock-out active; awaiting technician part replacement.',
+    };
 
     await supabase
       .from('equipment')
@@ -28,6 +36,7 @@ export const EquipmentPage: React.FC = () => {
         status: newStatus,
         health_score: newScore,
         last_serviced: new Date().toISOString().split('T')[0],
+        notes: defaultNotes[newStatus],
       })
       .eq('id', machine.id);
 
@@ -85,7 +94,7 @@ export const EquipmentPage: React.FC = () => {
               </div>
               <div className="w-full h-2.5 rounded-full bg-slate-950 overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${
+                  className={`h-full rounded-full transition-all duration-300 ${
                     eq.health_score >= 85
                       ? 'bg-emerald-500'
                       : eq.health_score >= 60
@@ -105,19 +114,22 @@ export const EquipmentPage: React.FC = () => {
             <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
               <button
                 onClick={() => updateMachineStatus(eq, 'Operational')}
-                className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-bold flex items-center gap-1"
+                disabled={eq.status === 'Operational'}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed text-emerald-400 text-xs font-bold flex items-center gap-1"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" /> Mark Serviced (98%)
               </button>
               <button
                 onClick={() => updateMachineStatus(eq, 'Maintenance Due')}
-                className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 text-xs font-bold flex items-center gap-1"
+                disabled={eq.status === 'Maintenance Due'}
+                className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed text-amber-400 text-xs font-bold flex items-center gap-1"
               >
                 <Wrench className="w-3.5 h-3.5" /> Flag Maintenance
               </button>
               <button
                 onClick={() => updateMachineStatus(eq, 'Out of Order')}
-                className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 text-xs font-bold flex items-center gap-1"
+                disabled={eq.status === 'Out of Order'}
+                className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 disabled:opacity-40 disabled:cursor-not-allowed text-rose-400 text-xs font-bold flex items-center gap-1"
               >
                 <AlertTriangle className="w-3.5 h-3.5" /> Report Fault
               </button>

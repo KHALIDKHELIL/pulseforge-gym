@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, UserPlus, CheckCircle2 } from 'lucide-react';
+import { Search, UserPlus, CheckCircle2, RefreshCw, Trash2, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Member } from '../types/database';
 
@@ -14,14 +14,17 @@ export const MembersPage: React.FC = () => {
   const [phone, setPhone] = useState('+2519');
   const [planTier, setPlanTier] = useState<'Basic' | 'Pro' | 'VIP'>('Pro');
   const [fitnessGoal, setFitnessGoal] = useState('Hypertrophy & Strength');
-  const [paymentMethod, setPaymentMethod] = useState<'Telebirr' | 'CBE Birr' | 'Cash' | 'Card'>('Telebirr');
+  const [paymentMethod, setPaymentMethod] = useState<'Telebirr' | 'CBE Birr' | 'Cash' | 'Card'>(
+    'Telebirr'
+  );
+  const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const fetchMembers = async () => {
     const { data } = await supabase
       .from('members')
       .select('*')
-      .order('join_date', { ascending: false });
+      .order('member_code', { ascending: true });
     if (data) setMembers(data as Member[]);
   };
 
@@ -31,19 +34,40 @@ export const MembersPage: React.FC = () => {
 
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    // Prevent duplicate email or phone
+    const duplicate = members.find(
+      (m) =>
+        m.email.toLowerCase() === email.trim().toLowerCase() ||
+        m.phone.trim() === phone.trim()
+    );
+    if (duplicate) {
+      setFormError(
+        `A member with this email or phone already exists (${duplicate.full_name} - ${duplicate.member_code}).`
+      );
+      return;
+    }
+
     setSaving(true);
 
-    const randomCode = `PF-${Math.floor(1007 + Math.random() * 8990)}`;
+    // Generate clean sequential member code (e.g. PF-1007)
+    const maxNum = members.reduce((max, m) => {
+      const num = parseInt(m.member_code.replace('PF-', ''), 10);
+      return !isNaN(num) && num > max ? num : max;
+    }, 1000);
+    const nextCode = `PF-${maxNum + 1}`;
+
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 30);
 
     const { data: newMember } = await supabase
       .from('members')
       .insert({
-        member_code: randomCode,
-        full_name: fullName,
-        email,
-        phone,
+        member_code: nextCode,
+        full_name: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
         plan_tier: planTier,
         status: 'Active',
         expiry_date: expiry.toISOString().split('T')[0],
@@ -69,6 +93,42 @@ export const MembersPage: React.FC = () => {
     setShowAddModal(false);
     setFullName('');
     setEmail('');
+    setPhone('+2519');
+    fetchMembers();
+  };
+
+  const handleQuickRenewMember = async (member: Member) => {
+    const tierPrices: Record<string, number> = { VIP: 3500, Pro: 2200, Basic: 1200 };
+    const baseDate =
+      member.status !== 'Expired' && member.expiry_date
+        ? new Date(member.expiry_date)
+        : new Date();
+    baseDate.setDate(baseDate.getDate() + 30);
+
+    await supabase
+      .from('members')
+      .update({
+        status: 'Active',
+        expiry_date: baseDate.toISOString().split('T')[0],
+      })
+      .eq('id', member.id);
+
+    await supabase.from('payments').insert({
+      member_id: member.id,
+      invoice_no: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
+      amount: tierPrices[member.plan_tier] || 2200,
+      plan_tier: member.plan_tier,
+      payment_method: 'Telebirr',
+      payment_status: 'Completed',
+    });
+
+    fetchMembers();
+  };
+
+  const handleDeleteMember = async (member: Member) => {
+    if (!window.confirm(`Remove ${member.full_name} (${member.member_code}) from gym directory?`))
+      return;
+    await supabase.from('members').delete().eq('id', member.id);
     fetchMembers();
   };
 
@@ -86,11 +146,14 @@ export const MembersPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-extrabold text-white">Member Directory & Billing CRM</h1>
           <p className="text-sm text-slate-400">
-            Manage gym memberships, QR pass codes, and Telebirr/CBE Birr subscriptions.
+            Manage gym memberships, sequential QR codes, duplicate checks, and Telebirr/CBE Birr renewals.
           </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setFormError(null);
+            setShowAddModal(true);
+          }}
           className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-2 self-start sm:self-auto shadow-lg shadow-emerald-500/20"
         >
           <UserPlus className="w-4 h-4" />
@@ -140,6 +203,7 @@ export const MembersPage: React.FC = () => {
                 <th className="py-3.5 px-4">Fitness Goal</th>
                 <th className="py-3.5 px-4">Streak</th>
                 <th className="py-3.5 px-4">Expiry</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-sm">
@@ -175,6 +239,24 @@ export const MembersPage: React.FC = () => {
                     🔥 {m.streak_days} days
                   </td>
                   <td className="py-3.5 px-4 text-xs text-slate-400">{m.expiry_date}</td>
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleQuickRenewMember(m)}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-bold flex items-center gap-1"
+                        title="Extend subscription by +30 days"
+                      >
+                        <RefreshCw className="w-3 h-3" /> +30d
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMember(m)}
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"
+                        title="Delete member"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -188,8 +270,16 @@ export const MembersPage: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-white">Register New Gym Member</h3>
             <p className="text-xs text-slate-400 mt-1">
-              Automatically generates a QR Member Code and logs payment in Supabase.
+              Generates the next sequential QR code and logs payment in Supabase.
             </p>
+
+            {formError && (
+              <div className="mt-3 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                {formError}
+              </div>
+            )}
+
             <form onSubmit={handleCreateMember} className="mt-4 space-y-3.5">
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-400 mb-1">

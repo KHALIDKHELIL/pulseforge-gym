@@ -27,7 +27,9 @@ export const AdminDashboard: React.FC = () => {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [renewMember, setRenewMember] = useState<Member | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'Telebirr' | 'CBE Birr' | 'Card' | 'Cash'>('Telebirr');
+  const [paymentMethod, setPaymentMethod] = useState<'Telebirr' | 'CBE Birr' | 'Card' | 'Cash'>(
+    'Telebirr'
+  );
   const [processingRenewal, setProcessingRenewal] = useState(false);
 
   const fetchDashboardData = async () => {

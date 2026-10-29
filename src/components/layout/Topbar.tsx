@@ -8,6 +8,7 @@ import {
   UserCheck,
   Users,
   CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -47,6 +48,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const handleSwitchRole = (role: UserRole) => {
+    if (!isDemoMode) return; // Security lock: real authenticated users cannot switch roles
     setActiveRole(role);
     onRoleChangeNavigate(role);
   };
@@ -62,34 +64,41 @@ export const Topbar: React.FC<TopbarProps> = ({
         </button>
         <div className="hidden sm:block">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Active Role View:{' '}
+            Workspace:{' '}
           </span>
           <span className="text-xs font-extrabold uppercase text-emerald-400">
-            {activeRole} {isDemoMode && '(Evaluator Demo)'}
+            {activeRole} {isDemoMode ? '(Evaluator Sandbox)' : '(Authenticated Session)'}
           </span>
         </div>
       </div>
 
-      {/* Persistent 1-Click Evaluator Role Switcher */}
-      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-        {(['admin', 'reception', 'trainer', 'member'] as const).map((r) => (
-          <button
-            key={r}
-            onClick={() => handleSwitchRole(r)}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition flex items-center gap-1.5 ${
-              activeRole === r
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            {r === 'admin' && <ShieldCheck className="w-3.5 h-3.5" />}
-            {r === 'reception' && <QrCode className="w-3.5 h-3.5" />}
-            {r === 'trainer' && <UserCheck className="w-3.5 h-3.5" />}
-            {r === 'member' && <Users className="w-3.5 h-3.5" />}
-            <span className="hidden md:inline">{r}</span>
-          </button>
-        ))}
-      </div>
+      {/* Show Role Switcher ONLY in Evaluator Demo Mode; show RBAC Lock for real users */}
+      {isDemoMode ? (
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          {(['admin', 'reception', 'trainer', 'member'] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => handleSwitchRole(r)}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition flex items-center gap-1.5 ${
+                activeRole === r
+                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {r === 'admin' && <ShieldCheck className="w-3.5 h-3.5" />}
+              {r === 'reception' && <QrCode className="w-3.5 h-3.5" />}
+              {r === 'trainer' && <UserCheck className="w-3.5 h-3.5" />}
+              {r === 'member' && <Users className="w-3.5 h-3.5" />}
+              <span className="hidden md:inline">{r}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950 border border-emerald-500/30 text-xs font-bold text-emerald-400">
+          <Lock className="w-3.5 h-3.5" />
+          <span className="capitalize">{activeRole} Access Only</span>
+        </div>
+      )}
 
       {/* Right Notifications & Profile */}
       <div className="flex items-center gap-3">
