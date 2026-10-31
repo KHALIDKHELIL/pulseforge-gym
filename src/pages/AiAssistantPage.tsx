@@ -5,7 +5,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   isMedicalRefusal?: boolean;
-  source?: 'Gemini 2.5 Flash' | 'Safety Guardrail' | 'PulseForge Coach';
+  source?: 'Gemini 3.8 Flash' | 'Safety Guardrail' | 'PulseForge Coach';
 }
 
 const MEDICAL_KEYWORDS = [
@@ -75,12 +75,12 @@ export const AiAssistantPage: React.FC = () => {
       return;
     }
 
-    // 2. Call Live Google Gemini 2.5 Flash API via VITE_GEMINI_API_KEY
+    // 2. Call Live Google Gemini 3.8 Flash API via VITE_GEMINI_API_KEY
     if (geminiApiKey) {
       setLoading(true);
       try {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiApiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -107,7 +107,7 @@ export const AiAssistantPage: React.FC = () => {
           {
             role: 'assistant',
             text: aiText,
-            source: data?.candidates ? 'Gemini 2.5 Flash' : 'PulseForge Coach',
+            source: data?.candidates ? 'Gemini 3.8 Flash' : 'PulseForge Coach',
           },
         ]);
       } catch {
