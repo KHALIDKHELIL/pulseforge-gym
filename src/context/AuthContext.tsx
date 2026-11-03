@@ -58,60 +58,68 @@ const DEMO_PROFILES: Record<UserRole, Profile> = {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [activeRole, setActiveRole] = useState<UserRole>('admin');
+  const [activeRole, setActiveRole] = useState<UserRole>('member');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchProfile = async (userId: string, userEmail?: string) => {
+  const fetchProfile = async (authUser: User) => {
+    const metaRole = (authUser.user_metadata?.role as UserRole) || 'member';
+    const metaName =
+      authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Gym User';
+
     const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userId)
+      .eq('id', authUser.id)
       .single();
 
     if (data) {
+      const dbRole = (data.role as UserRole) || metaRole;
       setProfile(data as Profile);
-      setActiveRole((data.role as UserRole) || 'member');
+      setActiveRole(dbRole);
     } else {
-      const fallbackRole: UserRole = 'admin';
-      setProfile({
-        id: userId,
-        full_name: userEmail?.split('@')[0] || 'Gym User',
-        email: userEmail || null,
-        phone: null,
-        role: fallbackRole,
+      const newProfile: Profile = {
+        id: authUser.id,
+        full_name: metaName,
+        email: authUser.email || null,
+        phone: authUser.user_metadata?.phone || null,
+        role: metaRole,
         avatar_url: null,
         created_at: new Date().toISOString(),
-      });
-      setActiveRole(fallbackRole);
+      };
+      await supabase.from('profiles').upsert(newProfile);
+      setProfile(newProfile);
+      setActiveRole(metaRole);
     }
   };
 
   useEffect(() => {
-    const savedDemoRole = localStorage.getItem('pf_demo_role') as UserRole | null;
-    if (savedDemoRole && DEMO_PROFILES[savedDemoRole]) {
-      setIsDemoMode(true);
-      setActiveRole(savedDemoRole);
-      setProfile(DEMO_PROFILES[savedDemoRole]);
-      setLoading(false);
-      return;
-    }
-
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id, session.user.email).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
+        localStorage.removeItem('pf_demo_role');
+        setIsDemoMode(false);
+        setUser(session.user);
+        fetchProfile(session.user).finally(() => setLoading(false));
+        return;
       }
+
+      const savedDemoRole = localStorage.getItem('pf_demo_role') as UserRole | null;
+      if (savedDemoRole && DEMO_PROFILES[savedDemoRole]) {
+        setIsDemoMode(true);
+        setActiveRole(savedDemoRole);
+        setProfile(DEMO_PROFILES[savedDemoRole]);
+      }
+      setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         setIsDemoMode(false);
         localStorage.removeItem('pf_demo_role');
-        fetchProfile(session.user.id, session.user.email);
+        fetchProfile(session.user);
       } else if (!localStorage.getItem('pf_demo_role')) {
         setProfile(null);
       }
@@ -121,11 +129,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const handleRoleSwitch = (role: UserRole) => {
+    // STRICT SECURITY GUARD: Real authenticated users cannot switch roles
+    if (!isDemoMode) return;
     setActiveRole(role);
-    if (isDemoMode) {
-      setProfile(DEMO_PROFILES[role]);
-      localStorage.setItem('pf_demo_role', role);
-    }
+    setProfile(DEMO_PROFILES[role]);
+    localStorage.setItem('pf_demo_role', role);
   };
 
   const loginAsDemoRole = (role: UserRole) => {

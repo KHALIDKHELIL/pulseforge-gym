@@ -8,13 +8,14 @@ import {
   XCircle,
   RotateCcw,
   AlertTriangle,
+  Lock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ClassBooking, GymClass, Member } from '../types/database';
 import { useAuth } from '../context/AuthContext';
 
 export const ClassesPage: React.FC = () => {
-  const { activeRole } = useAuth();
+  const { activeRole, user, profile } = useAuth();
   const [classes, setClasses] = useState<GymClass[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [bookings, setBookings] = useState<ClassBooking[]>([]);
@@ -34,14 +35,30 @@ export const ClassesPage: React.FC = () => {
     if (mRes.data) {
       const mList = mRes.data as Member[];
       setMembers(mList);
-      if (mList[0] && !selectedMemberId) setSelectedMemberId(mList[0].id);
+
+      // If logged in as a member, lock to their own member profile
+      if (activeRole === 'member') {
+        const matched = mList.find(
+          (m) =>
+            (user?.id && m.user_id === user.id) ||
+            (user?.email && m.email?.toLowerCase() === user.email.toLowerCase()) ||
+            (profile?.email && m.email?.toLowerCase() === profile.email.toLowerCase())
+        );
+        if (matched) {
+          setSelectedMemberId(matched.id);
+        } else if (mList[0] && !selectedMemberId) {
+          setSelectedMemberId(mList[0].id);
+        }
+      } else if (mList[0] && !selectedMemberId) {
+        setSelectedMemberId(mList[0].id);
+      }
     }
     if (bRes.data) setBookings(bRes.data as ClassBooking[]);
   };
 
   useEffect(() => {
     fetchClassesAndBookings();
-  }, []);
+  }, [activeRole, user]);
 
   const selectedMember = members.find((m) => m.id === selectedMemberId);
 
@@ -59,7 +76,6 @@ export const ClassesPage: React.FC = () => {
 
     setBusyClassId(gymClass.id);
 
-    // 1. If already booked -> Cancel reservation & free up 1 spot
     if (existingBooking) {
       await supabase.from('class_bookings').delete().eq('id', existingBooking.id);
       const nextCount = Math.max(0, gymClass.enrolled_count - 1);
@@ -77,7 +93,6 @@ export const ClassesPage: React.FC = () => {
       return;
     }
 
-    // 2. Guardrail: Block Expired members from booking classes
     if (selectedMember.status === 'Expired') {
       showBanner(
         'error',
@@ -87,14 +102,12 @@ export const ClassesPage: React.FC = () => {
       return;
     }
 
-    // 3. Guardrail: Capacity check
     if (gymClass.enrolled_count >= gymClass.capacity) {
       showBanner('error', `"${gymClass.title}" has reached maximum capacity.`);
       setBusyClassId(null);
       return;
     }
 
-    // 4. Create unique booking
     const { error } = await supabase.from('class_bookings').insert({
       class_id: gymClass.id,
       member_id: selectedMember.id,
@@ -154,20 +167,33 @@ export const ClassesPage: React.FC = () => {
             </button>
           )}
 
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5">
-            <span className="text-xs text-slate-400 font-bold">Book as:</span>
-            <select
-              value={selectedMemberId}
-              onChange={(e) => setSelectedMemberId(e.target.value)}
-              className="bg-transparent text-xs font-bold text-white focus:outline-none"
-            >
-              {members.map((m) => (
-                <option key={m.id} value={m.id} className="bg-slate-900 text-white">
-                  {m.full_name} ({m.member_code} • {m.status})
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Staff can select which member to book for; Members are strictly locked to their own profile */}
+          {activeRole === 'member' ? (
+            <div className="flex items-center gap-2 bg-slate-900 border border-emerald-500/30 rounded-xl px-3.5 py-2 text-xs">
+              <Lock className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-slate-400">Booking as:</span>
+              <span className="font-bold text-white">
+                {selectedMember
+                  ? `${selectedMember.full_name} (${selectedMember.member_code})`
+                  : profile?.full_name}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5">
+              <span className="text-xs text-slate-400 font-bold">Book for Member:</span>
+              <select
+                value={selectedMemberId}
+                onChange={(e) => setSelectedMemberId(e.target.value)}
+                className="bg-transparent text-xs font-bold text-white focus:outline-none"
+              >
+                {members.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-slate-900 text-white">
+                    {m.full_name} ({m.member_code} • {m.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
