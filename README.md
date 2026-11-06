@@ -101,6 +101,6 @@ Fitness centers in Ethiopia and emerging markets frequently rely on fragmented s
 
 ### 1. Clone the Repository & Install Dependencies
 ```bash
-git clone <https://github.com/KHALIDKHELIL/pulseforge-gym>
+git clone https://github.com/KHALIDKHELIL/pulseforge-gym
 cd pulseforge-gym
 npm install
